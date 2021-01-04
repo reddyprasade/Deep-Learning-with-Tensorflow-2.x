@@ -1,0 +1,161 @@
+Here are instructions on how to perform image padding.
+
+IMAGE PADDING
+=============
+
+Since neighborhood operations will require you to access
+pixels "off the edge" of the image when you are near the
+borders, it is necessary to first pad the image.
+In this manner, you effectively make a somewhat larger
+image (with padding) and can begin processing the image by
+centering the kernel in the interior of the image (instead
+of the upper left corner). The first kernel position is
+chosen such that the upper left corner of the kernel is
+aligned with the upper left corner of the padded image.
+Now the kernel is centered on what used to be the upper
+left corner of the original image, however it now has
+underlying (padded) pixels to consider where there used
+to be nothing (off-the-edge).
+Similarly, the kernel is moved from pixel to pixel along
+a scanline (row) until the right side of the kernel is
+aligned with the right side of the padded image.
+In essence, we are centering the kernel on only a subset
+of the pixels in the padded image, producing a smaller
+output image. However, the size of the output image is
+identical to that of the input image because all of the
+pixels upon which the kernel was centered are exactly
+those that comprised the original input.
+
+Example: Consider the following 8x6 image.
+
+ABCDEFGH
+IJKLMNOP
+QRSTUVWX
+YZabcdef
+ghijklmn
+opqrstuv
+
+The amount of padding we wish to add is dependent on the size
+of the kernel. For a (2n+1)x(2n+1) kernel, we must add an
+additional n rows/columns on each border. For instance, a 5x5
+kernel requires an additional 2 rows and columns on each border.
+This is due to the fact that when we center the kernel on
+pixel A (upper left), the kernel must be able to reference two
+neighbors to the left and above.
+
+There are generally four ways to perform padding:
+zero padding, pixel replication, reflection, and extrapolation.
+In all of these cases, you have to malloc (w+2m)*(h+2n) bytes,
+assuming your input image has width w, height h, and your
+kernel has dimensions (2m+1) along the horizontal direction
+and (2n+1) along the vertical dimension. Usually n=m but
+you have to be prepared to handle n != m.
+
+
+
+ZERO PADDING
+============
+
+Zero padding is easily done by filling the outer padded region
+with zeros:
+
+00|00000000|00
+00|00000000|00
+--------------
+00|ABCDEFGH|00
+00|IJKLMNOP|00
+00|QRSTUVWX|00
+00|YZabcdef|00
+00|ghijklmn|00
+00|opqrstuv|00
+--------------
+00|00000000|00
+00|00000000|00
+
+
+
+PIXEL REPLICATION
+=================
+
+Pixel replication is done by copying the nearest border pixel:
+
+AA|ABCDEFGH|HH
+AA|ABCDEFGH|HH
+--------------
+AA|ABCDEFGH|HH
+II|IJKLMNOP|PP
+QQ|QRSTUVWX|XX
+YY|YZabcdef|ff
+gg|ghijklmn|nn
+oo|opqrstuv|vv
+--------------
+oo|opqrstuv|vv
+oo|opqrstuv|vv
+
+
+
+REFLECTION
+==========
+
+Padded pixels are computed by reflecting the input image
+pixels about the border:
+
+SR|QRSTUVWX|WV
+KJ|IJKLMNOP|ON
+--------------
+CB|ABCDEFGH|GF
+KJ|IJKLMNOP|ON
+SR|QRSTUVWX|WV
+aZ|YZabcdef|ed
+ih|ghijklmn|ml
+qp|opqrstuv|ut
+--------------
+ih|ghijklmn|ml
+aZ|YZabcdef|ed
+
+
+LINEAR EXTRAPOLATION
+====================
+
+Linear extrapolation seeks to extend the image as if it
+were continuing along a linear ramp off the edge of the image.
+It makes use of reflection about the border.
+We compute the slope between the border pixel and some
+before we add that to successive padded pixels. For instance,
+consider the last three pixels in the first row of the input image:
+
+F   G   H  |  2H-G  2H-F
+
+Note that 2H-G is due to the fact that we are making a linear
+ramp from G to H to 2H-G.
+The pixel value 2H-F allows us to make a ramp from F to H to 2H-F.
+Notice that the ramp is made up of the border pixel, the computed
+padded pixel and the input pixel that is a reflection of the padded
+pixel about the border. There are other possibilities as well:
+
+F   G   H  | 2H-G  3H-2G
+
+This continually adds the term H-G to the previous pixel.
+Although this is in the true spirit of extending the last
+two border pixels along a line, it is too sensitive to whatever
+those two border pixels are doing. We prefer the former method for
+linear extrapolation. Carrying this out for the whole image yields:
+
+2A-S 2A-R | 2A-Q 2B-R 2C-S 2D-T 2E-U 2F-V 2G-W 2H-X | 2H-W 2H-V
+2A-K 2A-J | 2A-I 2B-J 2C-K 2D-L 2E-M 2F-N 2G-O 2H-P | 2H-O 2H-N
+---------------------------------------------------------------
+2A-C 2A-B |  A    B    C    D    E    F    G    H   | 2H-G 2H-G
+2I-K 2I-J |  I    J    K    L    M    N    O    P   | 2P-O 2P-N
+2Q-S 2Q-R |  Q    R    S    T    U    V    W    X   | 2X-W 2X-V
+2Y-a 2Y-Z |  Y    Z    a    b    c    d    e    f   | 2f-e 2f-d
+2g-i 2g-h |  g    h    i    j    k    l    m    n   | 2n-m 2n-l
+2o-q 2o-p |  o    p    q    r    s    t    u    v   | 2v-u 2v-t
+---------------------------------------------------------------
+2o-p 2o-h | 2o-g 2p-h 2q-i 2r-j 2s-k 2t-l 2u-m 2v-n | 2v-m 2v-l
+2o-a 2o-Z | 2o-Y 2p-Z 2q-a 2r-b 2s-c 2t-d 2u-e 2v-f | 2v-e 2v-d
+
+NOTE: This result is equivalent to taking the padded pixels
+from image reflection (previous section) and subtracting
+them from 2*(nearest border pixel).
+Therefore, once you have implemented reflection, linear
+extrapolation should be a slight modification.
